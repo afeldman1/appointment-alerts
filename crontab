@@ -1,0 +1,2 @@
+*/5 * * * * python /vaccine_valley.py >> /logs/logfile.log
+  

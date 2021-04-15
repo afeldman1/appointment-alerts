@@ -8,6 +8,8 @@ SENDER_USERNAME = os.environ['SENDER_USERNAME']
 SENDER_PASSWORD = os.environ['SENDER_PASSWORD']
 RECIPIENTS = os.environ['RECIPIENTS'].split(',')
 
+CACHEFILENAME = "timeslots_cache.json"
+
 # LOCATIONS = ['Paramus Vaccination Center (PFIZER)']
 
 PROVIDER_LOCATION_IDS = ['pr_SFFOirUdmkObdq2f6L6k1B|lo_u78b6Fvwp0Ot7TW67q6qLx']
@@ -88,7 +90,7 @@ def create_message(userName, recipients, timeslots):
 
     subject = 'Vaccine Appt Available'
     registrationUrl = 'zocdoc.com/wl/valleycovid19vaccination/patientvaccine'
-    message = f"Valley Hospital has vaccine spots available. Timeslots available are {','.join(map(str, timeslots))}. {registrationUrl}"
+    message = f"Valley Hospital has new vaccine spots available. New timeslots available are {', '.join(map(str, timeslots))}. {registrationUrl}"
 
     msg = EmailMessage()
     msg.set_content(message)
@@ -119,12 +121,43 @@ def notify_recipients(smtp_host, smtp_port, userName, password, recipients, time
 
     send_email(smtp_host, smtp_port, userName, password, msg)
 
+def write_cache(cacheFileName, timeslots):
+    import json
+
+    with open(cacheFileName, 'w') as cacheFile:
+        json.dump(timeslots, cacheFile)
+
+def is_file_exist(fileName):
+    import os
+
+    return os.path.isfile(fileName)
+
+def read_cache(cacheFileName):
+    import json
+
+    cacheFile = open(cacheFileName)
+    timeslots = json.load(cacheFile)
+    cacheFile.close
+
+    return timeslots
+
+def remove_old_timeslots(cacheFileName, timeslots):
+    cachedTimeslots = read_cache(cacheFileName)
+
+    newTimeslots = [ts for ts in timeslots if ts not in cachedTimeslots]
+
+    return newTimeslots
+
 def main():
     timeslots = inquire_availability(PROVIDER_LOCATION_IDS)
 
-    if len(timeslots) > 0:
-        notify_recipients(SMTP_HOST, SMTP_PORT, SENDER_USERNAME, SENDER_PASSWORD, RECIPIENTS, timeslots)
+    newTimeslots = remove_old_timeslots(CACHEFILENAME, timeslots) if is_file_exist(CACHEFILENAME) else timeslots
+
+    if len(newTimeslots) > 0:
+        notify_recipients(SMTP_HOST, SMTP_PORT, SENDER_USERNAME, SENDER_PASSWORD, RECIPIENTS, newTimeslots)
     else:
-        log("No availability at this time")
+        log("No new availability at this time")
+
+    write_cache(CACHEFILENAME, timeslots)
 
 main()

@@ -1,2 +1,1 @@
-*/5 * * * * python /vaccine_valley.py >> /logs/logfile.log
-  
+*/5 * * * * python /$PROCESS_NAME.py >> /logs/logfile.log

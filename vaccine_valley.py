@@ -1,34 +1,25 @@
+import common, os
 
-import os
-
-# PROVIDER_LOCATION_IDS = os.environ['PROVIDER_LOCATION_IDS'].split(',')
+PROVIDER_LOCATION_IDS = os.environ['PROVIDER_LOCATION_IDS'].split(',')
 SMTP_HOST = os.environ['SMTP_HOST']
 SMTP_PORT = os.environ['SMTP_PORT']
 SENDER_USERNAME = os.environ['SENDER_USERNAME']
 SENDER_PASSWORD = os.environ['SENDER_PASSWORD']
 RECIPIENTS = os.environ['RECIPIENTS'].split(',')
 
-CACHEFILENAME = "timeslots_cache.json"
+CACHE_FILENAME = "valley_vaccine_cache.json"
 
 # LOCATIONS = ['Paramus Vaccination Center (PFIZER)']
 
 PROVIDER_LOCATION_IDS = ['pr_SFFOirUdmkObdq2f6L6k1B|lo_u78b6Fvwp0Ot7TW67q6qLx']
 # PROVIDER_LOCATION_IDS = {'Ridgewood Vaccination Center at The Valley Hospital (J&J)': 'pr_uOYVNjhmlk-FBQbdY9Y0mx|lo_a1ZXOxJUPE2kpG_FWThIQB', 'Paramus Vaccination Center (PFIZER)': 'pr_SFFOirUdmkObdq2f6L6k1B|lo_u78b6Fvwp0Ot7TW67q6qLx'}
 
-def log(str):
-    import datetime
-
-    print(f"{datetime.datetime.now()}   {str}")
-
-def flatten(arr):
-    return [item for subl in arr for item in subl]
-
 def inquire_availability(providerLocationIds):
     responses = map(get_request, providerLocationIds)
 
-    timeslots = flatten(list(map(parse_response, responses)))
+    timeslots = parse(responses)
 
-    log(f"timeslots: {timeslots}")
+    common.log(f"timeslots: {[common.format_datetime(ts) for ts in timeslots]}")
 
     return timeslots
 
@@ -68,7 +59,7 @@ def get_request(providerLocationId):
 
     resp = requests.post(url, headers=headers, data=data)
 
-    log(resp.status_code)
+    common.log(resp.status_code)
 
     return resp.text
 
@@ -81,16 +72,25 @@ def parse_response(resp):
 
     timeslots_by_day = list(filter(lambda ts: len(ts) > 0, list(timeslots_raw)))
 
-    timeslots = flatten(timeslots_by_day)
+    timeslots = common.flatten(timeslots_by_day)
 
     return timeslots
 
-def create_message(userName, recipients, timeslots):
+def parse(responses):
+    timeslots_raw = common.flatten(list(map(parse_response, responses)))
+
+    format = '%Y-%m-%dT%H:%M:%S%z'
+
+    timeslots = [common.string_to_datetime(format, timeslot) for timeslot in timeslots_raw]
+
+    return timeslots
+
+def create_valley_vacine_message(userName, recipients, timeslots):
     from email.message import EmailMessage
 
     subject = 'Vaccine Appt Available'
     registrationUrl = 'zocdoc.com/wl/valleycovid19vaccination/patientvaccine'
-    message = f"Valley Hospital has new vaccine spots available. New timeslots available are {', '.join(map(str, timeslots))}. {registrationUrl}"
+    message = f"Valley Hospital has new vaccine spots available. New timeslots available are {', '.join(map(common.format_datetime, timeslots))}. {registrationUrl}"
 
     msg = EmailMessage()
     msg.set_content(message)
@@ -101,63 +101,28 @@ def create_message(userName, recipients, timeslots):
 
     return msg
 
-def send_email(smtp_host, smtp_port, userName, password, msg):
-    import smtplib
-    # import ssl
-
-    server = smtplib.SMTP(smtp_host, smtp_port)
-    # context = ssl.create_default_context()
-    server.starttls()
-    server.login(userName, password)
-
-    server.send_message(msg)
-
-    server.quit()
-
-    log(f"Sent email to {msg['Bcc']}")
-
 def notify_recipients(smtp_host, smtp_port, userName, password, recipients, timeslots):
-    msg = create_message(userName, recipients, timeslots)
+    msg = create_valley_vacine_message(userName, recipients, timeslots)
 
-    send_email(smtp_host, smtp_port, userName, password, msg)
+    common.send_email(smtp_host, smtp_port, userName, password, msg)
 
-def write_cache(cacheFileName, timeslots):
-    import json
+def serialize_cache(timeslots):
+        timestamped_timeslots = [ts.timestamp() for ts in timeslots]
 
-    with open(cacheFileName, 'w') as cacheFile:
-        json.dump(timeslots, cacheFile)
-
-def is_file_exist(fileName):
-    import os
-
-    return os.path.isfile(fileName)
-
-def read_cache(cacheFileName):
-    import json
-
-    cacheFile = open(cacheFileName)
-    timeslots = json.load(cacheFile)
-    cacheFile.close
-
-    return timeslots
-
-def remove_old_timeslots(cacheFileName, timeslots):
-    cachedTimeslots = read_cache(cacheFileName)
-
-    newTimeslots = [ts for ts in timeslots if ts not in cachedTimeslots]
-
-    return newTimeslots
+        return timestamped_timeslots
 
 def main():
     timeslots = inquire_availability(PROVIDER_LOCATION_IDS)
 
-    newTimeslots = remove_old_timeslots(CACHEFILENAME, timeslots) if is_file_exist(CACHEFILENAME) else timeslots
+    new_timeslots = common.remove_old_timeslots(CACHE_FILENAME, timeslots) if common.is_file_exist(CACHE_FILENAME) else timeslots
 
-    if len(newTimeslots) > 0:
-        notify_recipients(SMTP_HOST, SMTP_PORT, SENDER_USERNAME, SENDER_PASSWORD, RECIPIENTS, newTimeslots)
+    if len(new_timeslots) > 0:
+        notify_recipients(SMTP_HOST, SMTP_PORT, SENDER_USERNAME, SENDER_PASSWORD, RECIPIENTS, new_timeslots)
     else:
-        log("No new availability at this time")
+        common.log("No new availability at this time")
 
-    write_cache(CACHEFILENAME, timeslots)
+    serialized_timeslots = serialize_cache(timeslots)
+
+    common.write_cache(CACHE_FILENAME, serialized_timeslots)
 
 main()

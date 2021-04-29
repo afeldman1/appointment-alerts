@@ -55,4 +55,4 @@ Container images are configured using parameters passed at runtime and environme
 | `-e SMTP_PORT=587` | SMTP server port |
 | `-e SENDER_USERNAME=` | Username for SMTP server |
 | `-e SENDER_PASSWORD=` | Password for SMTP server |
-| `-e RECIPIENTS=` | Comma seperated list of alert email address recipients|
+| `-e RECIPIENTS=` | Comma separated list of alert email address recipients|
